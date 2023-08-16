@@ -6,7 +6,13 @@ using System.Runtime.Serialization.Formatters.Binary;
 
 public class Save_And_Load : MonoBehaviour
 {
-    string save_rute;
+    string save_rute_SB;
+    string save_rute_SB64;
+    string save_rute_XC;
+
+    /*MUY IMPORTANTE : de los tres metodos de guardado XOR CYPHER es el unico que permite guardar variables de tipo vector2, en caso que a usted le interese
+    guardar variables de vector2 debera utilizar XOR CYPHER, en el codigo esta comentado como guardar tanto la posicion del jugador como de los diamantes
+    con vector2*/
 
     [SerializeField] GameObject _player;
 
@@ -20,48 +26,59 @@ public class Save_And_Load : MonoBehaviour
     //Al comenzar el juego (antes que cualquier start)
     private void Awake() 
     {
-        save_rute = Application.persistentDataPath + "/DatosGuardados.data";
+        save_rute_SB = Application.persistentDataPath + "/DatosGuardados_SB.data";
+        save_rute_SB64 = Application.persistentDataPath + "/DatosGuardados_SB64.data";
+        save_rute_XC = Application.persistentDataPath + "/DatosGuardados_XC.data";
 
         //si no hay archivo crea uno por defecto
-        if ( !File.Exists( save_rute ) )
+        if ( !File.Exists( save_rute_SB ) || !File.Exists(save_rute_SB64) || !File.Exists(save_rute_XC) )
         {
             mydata reset_data = new mydata();
 
             reset_data.Fuel = 100f;
             reset_data._color = mydata.Color_type.red;
             //reset_data.position = Vector2.zero;
+            reset_data.position[0] = 0f;
             reset_data.position[1] = 0f;
-            reset_data.position[2] = 0f;
             
             foreach (Transform coin in coins.transform)
                 //reset_data.coins.Add(coin.position);
                 reset_data.coins.Add( new float[2] {coin.position.x, coin.position.y} );
 
-            write_json( reset_data );
+
+            //escribe el archivo en caso de que alguno no exista
+            if ( !File.Exists(save_rute_SB64) )
+                write_data( reset_data, 1 );
+            if ( !File.Exists(save_rute_SB)   )
+                write_data( reset_data, 2 );
+            if ( !File.Exists(save_rute_XC)   )
+                write_data( reset_data, 0 );
         }
     }
 
     /////////////////////////////////////////////////////////////
-    //                          Jsons                          //
+    //                          Data                           //
     /////////////////////////////////////////////////////////////
-    void write_json(mydata save_me)
+    void write_data(mydata save_me, int save_option)
     {
-        /*string myJson = JsonUtility.ToJson( save_me );
-        File.WriteAllText( save_rute, myJson );*/
-
-        SerializeToBinary( save_me );
-
-        //SerializeToBinary_base64( save_me );
+        switch ( save_option )
+        {
+            case 1:     SerializeToBinary_base64( save_me ); break;
+            case 2:     SerializeToBinary( save_me );        break;
+            default:    string myJson = JsonUtility.ToJson( save_me );  
+                        File.WriteAllText( save_rute_XC, EncryptDecrypt(myJson) ); break;
+        }
     }
 
-    mydata read_json()
+    mydata read_data(int save_option)
     {
-        /*string myjson = File.ReadAllText( save_rute );
-        return( JsonUtility.FromJson<mydata>( myjson ) );*/
-
-        return( DeserializeToBinary() );
-
-        //return( DeserializeToBinary_base64() );
+        switch ( save_option )
+        {
+            case 1: return( DeserializeToBinary_base64() );
+            case 2: return( DeserializeToBinary() ); 
+            default: string myjson = File.ReadAllText( save_rute_XC ); 
+                     return( JsonUtility.FromJson<mydata>( EncryptDecrypt(myjson) ) );
+        }
     }
 
     /////////////////////////////////////////////////////
@@ -83,7 +100,7 @@ public class Save_And_Load : MonoBehaviour
     //Serializacion a binario
     private void SerializeToBinary(mydata data)
     {
-        FileStream file_stream = new FileStream(save_rute, FileMode.Create);
+        FileStream file_stream = new FileStream(save_rute_SB, FileMode.Create);
         BinaryFormatter binaryFormatter = new BinaryFormatter();
         binaryFormatter.Serialize(file_stream, data);
         file_stream.Close();
@@ -91,7 +108,7 @@ public class Save_And_Load : MonoBehaviour
     //Deserializacion a binario
     private mydata DeserializeToBinary()
     {
-        FileStream file_stream = new FileStream(save_rute, FileMode.Open);
+        FileStream file_stream = new FileStream(save_rute_SB, FileMode.Open);
         BinaryFormatter binaryFormatter = new BinaryFormatter();
         mydata data = (mydata) binaryFormatter.Deserialize(file_stream);
         file_stream.Close();
@@ -103,7 +120,7 @@ public class Save_And_Load : MonoBehaviour
     private void SerializeToBinary_base64(mydata data)
     {
         BinaryFormatter bf = new BinaryFormatter();
-        StreamWriter file = new StreamWriter(save_rute);
+        StreamWriter file = new StreamWriter(save_rute_SB64);
         MemoryStream ms = new MemoryStream();
         bf.Serialize(ms, data);
         string a = System.Convert.ToBase64String(ms.ToArray());
@@ -115,7 +132,7 @@ public class Save_And_Load : MonoBehaviour
     private mydata DeserializeToBinary_base64()
     {
         BinaryFormatter binaryFormatter = new BinaryFormatter();
-        StreamReader file = new StreamReader(save_rute);
+        StreamReader file = new StreamReader(save_rute_SB64);
         string a = file.ReadToEnd();
         MemoryStream ms = new MemoryStream(System.Convert.FromBase64String(a));
         mydata data = (mydata) binaryFormatter.Deserialize(ms);
@@ -128,7 +145,7 @@ public class Save_And_Load : MonoBehaviour
     /////////////////////////////////////////////////////////////
     //               Botonos de guardado y cargado             //
     /////////////////////////////////////////////////////////////
-    public void save_current_game()
+    public void save_current_game( int save_system )
     {
         mydata current_data = new mydata();
         //asigno el combustible actual
@@ -152,12 +169,12 @@ public class Save_And_Load : MonoBehaviour
             //current_data.coins.Add(coin.position);
             current_data.coins.Add( new float[2] {coin.position.x, coin.position.y} );
 
-        write_json( current_data );
+        write_data( current_data, save_system );
     }
 
-    public void load_last_game()
+    public void load_last_game( int save_system )
     {
-        mydata last_data = read_json();
+        mydata last_data = read_data( save_system );
 
         //asigno el combustible actual
         _player.GetComponent<movement>().change_fuel( last_data.Fuel );
